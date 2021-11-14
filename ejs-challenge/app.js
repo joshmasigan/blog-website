@@ -2,6 +2,7 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const _ = require("lodash");
+const mongoose = require("mongoose");
 const truncate = require(__dirname + "/truncate");
 
 const homeStartingContent = "Lacus vel facilisis volutpat est velit egestas dui id ornare. Semper auctor neque vitae tempus quam. Sit amet cursus sit amet dictum sit amet justo. Viverra tellus in hac habitasse. Imperdiet proin fermentum leo vel orci porta. Donec ultrices tincidunt arcu non sodales neque sodales ut. Mattis molestie a iaculis at erat pellentesque adipiscing. Magnis dis parturient montes nascetur ridiculus mus mauris vitae ultricies. Adipiscing elit ut aliquam purus sit amet luctus venenatis lectus. Ultrices vitae auctor eu augue ut lectus arcu bibendum at. Odio euismod lacinia at quis risus sed vulputate odio ut. Cursus mattis molestie a iaculis at erat pellentesque adipiscing.";
@@ -10,18 +11,34 @@ const contactContent = "Scelerisque eleifend donec pretium vulputate sapien. Rho
 
 const app = express();
 
-const posts = []; // stores post objects {title: string, post: string}
-
 app.set('view engine', 'ejs');
 
 app.use(bodyParser.urlencoded({extended: true}));
 app.use(express.static("public"));
 
+mongoose.connect('mongodb://localhost:27017/blogDB');
+
+const postSchema = new mongoose.Schema({
+  title: {
+    type: String,
+    required: true
+  },
+  body: {
+    type: String,
+    required: true
+  }
+});
+
+const Post = new mongoose.model("Post", postSchema);
+
 app.get("/", (req, res) =>{
-  res.render("home",
-  {homeContent: homeStartingContent,
-   posts: posts,
-   truncate: truncate});
+  Post.find({}, (err, foundPosts) => {
+    res.render("home",
+    {homeContent: homeStartingContent,
+    posts: foundPosts,
+    truncate: truncate});
+  });
+
 });
 
 app.get("/about", (req, res) =>{
@@ -36,25 +53,32 @@ app.get("/compose", (req, res) =>{
   res.render("compose");
 });
 
-app.get("/posts/:postName", (req, res) =>{
-  const requestedPost = _.lowerCase(req.params.postName);
-  posts.forEach(post => {
-    if(_.kebabCase(requestedPost) === _.kebabCase(_.lowerCase(post.title))){
-      res.render("post", {title: post.title,
-        content: post.content});
+app.get("/posts/:postId", (req, res) =>{
+  const requestedPostId = req.params.postId;
+  Post.findById(requestedPostId, (err, foundPost) => {
+    if(!err){
+      res.render("post", {
+        title: foundPost.title,
+        body: foundPost.body});
     }else{
-      //res.render("error")
+      console.log(err);
+      res.render("error");
     }
   });
 });
 
 app.post("/compose", (req, res) =>{
-  const post = {
-    title: req.body.postTitle,
-    content: req.body.postBody
-  };
-  posts.push(post);
-   res.redirect("/");
+ const post = new Post({
+    title: req.body.postTitle, // collected from compose.ejs form - postTitle
+    body: req.body.postBody // collected from compose.ejs form - postBody
+  });
+  post.save((err) => {
+    if(err){
+      console.log(err);
+    }else{
+      res.redirect("/");
+    }
+  });
 });
 
 app.listen(3000, function() {
